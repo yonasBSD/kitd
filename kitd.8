@@ -11,7 +11,6 @@
 .Op Fl d
 .Op Fl c Ar cooloff
 .Op Fl n Ar name
-.Op Fl p Ar pidfile
 .Op Fl t Ar restart
 .Ar command ...
 .
@@ -46,11 +45,6 @@ Set the name of the process
 and the logging prefix.
 The default is
 .Ar command .
-.It Fl p Ar pidfile
-Write the PID of
-.Nm
-to
-.Ar pidfile .
 .It Fl t Ar restart
 The initial interval in milliseconds
 between automatic restarts.
