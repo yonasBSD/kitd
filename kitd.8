@@ -1,0 +1,85 @@
+.Dd October  7, 2023
+.Dt KITD 8
+.Os
+.
+.Sh NAME
+.Nm kitd
+.Nd process supervisor
+.
+.Sh SYNOPSIS
+.Nm
+.Op Fl d
+.Op Fl c Ar cooloff
+.Op Fl n Ar name
+.Op Fl p Ar pidfile
+.Op Fl t Ar restart
+.Ar command ...
+.
+.Sh DESCRIPTION
+The
+.Nm
+daemon supervises
+a child process,
+redirecting its standard output
+and standard error to
+.Xr syslog 3 .
+When the child process exits,
+it is automatically restarted
+using exponential backoff.
+.
+.Pp
+The options are as follows:
+.Bl -tag -width Ds
+.It Fl c Ar cooloff
+The interval in milliseconds
+for which the child process must live
+before the restart interval
+is reset to its initial value.
+The default interval is 15 minutes.
+.It Fl d
+Do not daemonize.
+Log to standard error
+as well as
+.Xr syslog 3 .
+.It Fl n Ar name
+Set the name of the process
+and the logging prefix.
+The default is
+.Ar command .
+.It Fl p Ar pidfile
+Write the PID of
+.Nm
+to
+.Ar pidfile .
+.It Fl t Ar restart
+The initial interval in milliseconds
+between automatic restarts.
+This interval is doubled
+each time the child process
+is restarted.
+The default interval is 1 second.
+.El
+.
+.Pp
+.Nm
+responds to the following signals:
+.Bl -tag -width Ds
+.It Dv SIGHUP
+The child process is sent
+.Dv SIGTERM
+and restarted.
+.It Dv SIGTERM
+The child process is sent
+.Dv SIGTERM .
+.Nm
+exits.
+.It Dv SIGINFO
+The status of the child process
+is logged.
+.It Dv SIGUSR1 , Dv SIGUSR2
+The signal is forwarded to
+the child process.
+.El
+.
+.Sh AUTHORS
+.An June McEnroe Aq Mt june@causal.agency
