@@ -223,7 +223,7 @@ int main(int argc, char *argv[]) {
 			} else if (WIFSIGNALED(status)) {
 				int sig = WTERMSIG(status);
 				if (sig != SIGTERM) {
-					syslog(LOG_NOTICE, "child got signal %s", sys_signame[sig]);
+					syslog(LOG_NOTICE, "child got %s", strsignal(sig));
 				}
 			}
 
