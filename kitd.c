@@ -62,10 +62,10 @@ static void lbFlush(struct LineBuffer *lb, int priority) {
 	memmove(lb->buf, ptr, lb->len);
 }
 
-static const char *humanize(const struct timespec *interval) {
+static const char *humanize(const struct timeval *interval) {
 	static char buf[256];
 	if (!interval->tv_sec) {
-		snprintf(buf, sizeof(buf), "%dms", (int)(interval->tv_nsec / 1000000));
+		snprintf(buf, sizeof(buf), "%dms", (int)(interval->tv_usec / 1000));
 		return buf;
 	}
 	enum { M = 60, H = 60*M, D = 24*H };
@@ -85,10 +85,10 @@ static void signalHandler(int signal) {
 	signals[signal] = 1;
 }
 
-static void parseInterval(struct timespec *interval, const char *millis) {
+static void parseInterval(struct timeval *interval, const char *millis) {
 	unsigned long ms = strtoul(millis, NULL, 10);
 	interval->tv_sec = ms / 1000;
-	interval->tv_nsec = 1000000 * (ms % 1000);
+	interval->tv_usec = 1000 * (ms % 1000);
 }
 
 int main(int argc, char *argv[]) {
@@ -96,8 +96,8 @@ int main(int argc, char *argv[]) {
 
 	bool daemonize = true;
 	const char *name = NULL;
-	struct timespec restart = { .tv_sec = 1 };
-	struct timespec cooloff = { .tv_sec = 15 * 60 };
+	struct timeval restart = { .tv_sec = 1 };
+	struct timeval cooloff = { .tv_sec = 15 * 60 };
 	for (int opt; 0 < (opt = getopt(argc, argv, "c:dn:t:"));) {
 		switch (opt) {
 			break; case 'c': parseInterval(&cooloff, optarg);
@@ -144,6 +144,7 @@ int main(int argc, char *argv[]) {
 
 	signal(SIGHUP, signalHandler);
 	signal(SIGINT, signalHandler);
+	signal(SIGALRM, signalHandler);
 	signal(SIGTERM, signalHandler);
 	signal(SIGCHLD, signalHandler);
 	signal(SIGINFO, signalHandler);
@@ -152,30 +153,37 @@ int main(int argc, char *argv[]) {
 
 	pid_t child = 0;
 	bool stop = false;
-	struct timespec uptime = {0};
-	struct timespec deadline = {0};
-	struct timespec interval = restart;
+	struct timeval uptime = {0};
+	struct timeval interval = restart;
+	signals[SIGALRM] = 1;
 
-	sigset_t mask;
-	sigemptyset(&mask);
 	struct pollfd fds[2] = {
 		{ .fd = stdoutRW[0], .events = POLLIN },
 		{ .fd = stderrRW[0], .events = POLLIN },
 	};
 	for (;;) {
-		struct timespec now;
-		clock_gettime(CLOCK_MONOTONIC, &now);
+		struct timeval now;
+		struct timespec nowspec;
+		clock_gettime(CLOCK_MONOTONIC, &nowspec);
+		TIMESPEC_TO_TIMEVAL(&now, &nowspec);
 
-		if (signals[SIGINFO]) {
-			struct timespec time;
-			if (child) {
-				timespecsub(&now, &uptime, &time);
-				syslog(LOG_INFO, "child %d up %s", child, humanize(&time));
-			} else {
-				timespecsub(&deadline, &now, &time);
-				syslog(LOG_INFO, "restarting in %s", humanize(&time));
+		if (signals[SIGALRM]) {
+			assert(!child);
+			child = fork();
+			if (child < 0) {
+				syslog(LOG_ERR, "fork: %m");
+				return 1;
 			}
-			signals[SIGINFO] = 0;
+			if (child) {
+				uptime = now;
+				signals[SIGALRM] = 0;
+			} else {
+				setpgid(0, 0);
+				dup2(stdoutRW[1], STDOUT_FILENO);
+				dup2(stderrRW[1], STDERR_FILENO);
+				execvp(argv[0], (char *const *)argv);
+				err(127, "%s", argv[0]);
+			}
 		}
 
 		if (signals[SIGHUP]) {
@@ -228,29 +236,34 @@ int main(int argc, char *argv[]) {
 			}
 
 			if (stop) break;
-			timespecsub(&now, &uptime, &uptime);
-			if (timespeccmp(&uptime, &cooloff, >=)) {
+			timersub(&now, &uptime, &uptime);
+			if (timercmp(&uptime, &cooloff, >=)) {
 				interval = restart;
 			}
 			syslog(LOG_INFO, "restarting in %s", humanize(&interval));
-			timespecadd(&now, &interval, &deadline);
-			timespecadd(&interval, &interval, &interval);
+			struct itimerval timer = { .it_value = interval };
+			setitimer(ITIMER_REAL, &timer, NULL);
+			timeradd(&interval, &interval, &interval);
 		}
 
-		struct timespec timeout;
-		if (!child) {
-			if (timespeccmp(&deadline, &now, <)) {
-				timespecclear(&timeout);
+		if (signals[SIGINFO]) {
+			if (child) {
+				struct timeval time;
+				timersub(&now, &uptime, &time);
+				syslog(LOG_INFO, "child %d up %s", child, humanize(&time));
 			} else {
-				timespecsub(&deadline, &now, &timeout);
+				struct itimerval timer;
+				getitimer(ITIMER_REAL, &timer);
+				syslog(LOG_INFO, "restarting in %s", humanize(&timer.it_value));
 			}
+			signals[SIGINFO] = 0;
 		}
-		int nfds = ppoll(fds, 2, (child ? NULL : &timeout), &mask);
+
+		int nfds = poll(fds, 2, -1);
 		if (nfds < 0 && errno != EINTR) {
-			syslog(LOG_ERR, "ppoll: %m");
+			syslog(LOG_ERR, "poll: %m");
 			continue;
 		}
-
 		if (nfds > 0 && fds[0].revents) {
 			lbFill(&stdoutBuffer, fds[0].fd);
 			lbFlush(&stdoutBuffer, LOG_INFO);
@@ -258,23 +271,6 @@ int main(int argc, char *argv[]) {
 		if (nfds > 0 && fds[1].revents) {
 			lbFill(&stderrBuffer, fds[1].fd);
 			lbFlush(&stderrBuffer, LOG_NOTICE);
-		}
-
-		if (!child) {
-			child = fork();
-			if (child < 0) {
-				syslog(LOG_ERR, "fork: %m");
-				return 1;
-			}
-			if (child) {
-				clock_gettime(CLOCK_MONOTONIC, &uptime);
-			} else {
-				setpgid(0, 0);
-				dup2(stdoutRW[1], STDOUT_FILENO);
-				dup2(stderrRW[1], STDERR_FILENO);
-				execvp(argv[0], (char *const *)argv);
-				err(127, "%s", argv[0]);
-			}
 		}
 	}
 
