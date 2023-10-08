@@ -21,7 +21,6 @@
 #include <poll.h>
 #include <signal.h>
 #include <stdbool.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,38 +29,37 @@
 #include <syslog.h>
 #include <unistd.h>
 
-struct Line {
+struct LineBuffer {
 	size_t len;
 	char buf[1024];
 };
 
-static void lineFill(struct Line *line, int fd) {
-	size_t cap = sizeof(line->buf)-1 - line->len;
-	ssize_t len = read(fd, &line->buf[line->len], cap);
+static void lbFill(struct LineBuffer *lb, int fd) {
+	size_t cap = sizeof(lb->buf)-1 - lb->len;
+	ssize_t len = read(fd, &lb->buf[lb->len], cap);
 	if (len < 0 && errno != EAGAIN) {
 		syslog(LOG_ERR, "read: %m");
-		return;
 	}
-	line->len += len;
+	if (len > 0) lb->len += len;
 }
 
-static void lineFlush(struct Line *line, int priority) {
-	assert(line->len < sizeof(line->buf));
-	line->buf[line->len] = '\0';
+static void lbFlush(struct LineBuffer *lb, int priority) {
+	assert(lb->len < sizeof(lb->buf));
+	lb->buf[lb->len] = '\0';
 
-	if (line->len == sizeof(line->buf)-1) {
-		syslog(priority, "%s", line->buf);
-		line->len = 0;
+	if (lb->len == sizeof(lb->buf)-1) {
+		syslog(priority, "%s", lb->buf);
+		lb->len = 0;
 		return;
 	}
 
-	char *ptr = line->buf;
+	char *ptr = lb->buf;
 	for (char *nl; NULL != (nl = strchr(ptr, '\n')); ptr = &nl[1]) {
 		*nl = '\0';
 		syslog(priority, "%s", ptr);
 	}
-	line->len -= ptr - line->buf;
-	memmove(line->buf, ptr, line->len);
+	lb->len -= ptr - lb->buf;
+	memmove(lb->buf, ptr, lb->len);
 }
 
 static const char *humanize(const struct timespec *interval) {
@@ -70,22 +68,15 @@ static const char *humanize(const struct timespec *interval) {
 		snprintf(buf, sizeof(buf), "%dms", (int)(interval->tv_nsec / 1000000));
 		return buf;
 	}
+	enum { M = 60, H = 60*M, D = 24*H };
 	int s = interval->tv_sec;
-	int d = s / (24*60*60);
-	s %= 24*60*60;
-	int h = s / (60*60);
-	s %= 60*60;
-	int m = s / 60;
-	s %= 60;
-	if (d) {
-		snprintf(buf, sizeof(buf), "%dd %dh %dm %ds", d, h, m, s);
-	} else if (h) {
-		snprintf(buf, sizeof(buf), "%dh %dm %ds", h, m, s);
-	} else if (m) {
-		snprintf(buf, sizeof(buf), "%dm %ds", m, s);
-	} else {
-		snprintf(buf, sizeof(buf), "%ds", s);
-	}
+	int d = s / D; s %= D;
+	int h = s / H; s %= H;
+	int m = s / M; s %= M;
+	if (d) snprintf(buf, sizeof(buf), "%dd %dh %dm %ds", d, h, m, s);
+	else if (h) snprintf(buf, sizeof(buf), "%dh %dm %ds", h, m, s);
+	else if (m) snprintf(buf, sizeof(buf), "%dm %ds", m, s);
+	else snprintf(buf, sizeof(buf), "%ds", s);
 	return buf;
 }
 
@@ -105,8 +96,8 @@ int main(int argc, char *argv[]) {
 
 	bool daemonize = true;
 	const char *name = NULL;
-	struct timespec cooloff = { .tv_sec = 15 * 60 };
 	struct timespec restart = { .tv_sec = 1 };
+	struct timespec cooloff = { .tv_sec = 15 * 60 };
 	for (int opt; 0 < (opt = getopt(argc, argv, "c:dn:t:"));) {
 		switch (opt) {
 			break; case 'c': parseInterval(&cooloff, optarg);
@@ -124,7 +115,7 @@ int main(int argc, char *argv[]) {
 		name = (name ? &name[1] : argv[0]);
 	}
 
-	error = pledge("stdio rpath wpath proc exec", NULL);
+	error = pledge("stdio rpath proc exec", NULL);
 	if (error) err(1, "pledge");
 
 	int stdoutRW[2];
@@ -137,6 +128,9 @@ int main(int argc, char *argv[]) {
 
 	fcntl(stdoutRW[0], F_SETFL, O_NONBLOCK);
 	fcntl(stderrRW[0], F_SETFL, O_NONBLOCK);
+
+	struct LineBuffer stdoutBuffer = {0};
+	struct LineBuffer stderrBuffer = {0};
 
 	openlog(name, LOG_NDELAY | LOG_PID | LOG_PERROR, LOG_DAEMON);
 	if (daemonize) {
@@ -158,9 +152,7 @@ int main(int argc, char *argv[]) {
 
 	pid_t child = 0;
 	bool stop = false;
-	struct timespec now = {0};
 	struct timespec uptime = {0};
-	struct timespec timeout = {0};
 	struct timespec deadline = {0};
 	struct timespec interval = restart;
 
@@ -170,18 +162,18 @@ int main(int argc, char *argv[]) {
 		{ .fd = stdoutRW[0], .events = POLLIN },
 		{ .fd = stderrRW[0], .events = POLLIN },
 	};
-	struct Line stdoutBuffer = {0};
-	struct Line stderrBuffer = {0};
-
 	for (;;) {
+		struct timespec now;
+		clock_gettime(CLOCK_MONOTONIC, &now);
+
 		if (signals[SIGINFO]) {
-			clock_gettime(CLOCK_MONOTONIC, &now);
+			struct timespec time;
 			if (child) {
-				timespecsub(&now, &uptime, &timeout);
-				syslog(LOG_INFO, "child %d up %s", child, humanize(&timeout));
+				timespecsub(&now, &uptime, &time);
+				syslog(LOG_INFO, "child %d up %s", child, humanize(&time));
 			} else {
-				timespecsub(&deadline, &now, &timeout);
-				syslog(LOG_INFO, "restarting in %s", humanize(&timeout));
+				timespecsub(&deadline, &now, &time);
+				syslog(LOG_INFO, "restarting in %s", humanize(&time));
 			}
 			signals[SIGINFO] = 0;
 		}
@@ -236,7 +228,6 @@ int main(int argc, char *argv[]) {
 			}
 
 			if (stop) break;
-			clock_gettime(CLOCK_MONOTONIC, &now);
 			timespecsub(&now, &uptime, &uptime);
 			if (timespeccmp(&uptime, &cooloff, >=)) {
 				interval = restart;
@@ -246,8 +237,8 @@ int main(int argc, char *argv[]) {
 			timespecadd(&interval, &interval, &interval);
 		}
 
+		struct timespec timeout;
 		if (!child) {
-			clock_gettime(CLOCK_MONOTONIC, &now);
 			if (timespeccmp(&deadline, &now, <)) {
 				timespecclear(&timeout);
 			} else {
@@ -261,12 +252,12 @@ int main(int argc, char *argv[]) {
 		}
 
 		if (nfds > 0 && fds[0].revents) {
-			lineFill(&stdoutBuffer, fds[0].fd);
-			lineFlush(&stdoutBuffer, LOG_INFO);
+			lbFill(&stdoutBuffer, fds[0].fd);
+			lbFlush(&stdoutBuffer, LOG_INFO);
 		}
 		if (nfds > 0 && fds[1].revents) {
-			lineFill(&stderrBuffer, fds[1].fd);
-			lineFlush(&stderrBuffer, LOG_NOTICE);
+			lbFill(&stderrBuffer, fds[1].fd);
+			lbFlush(&stderrBuffer, LOG_NOTICE);
 		}
 
 		if (!child) {
@@ -286,4 +277,9 @@ int main(int argc, char *argv[]) {
 			}
 		}
 	}
+
+	lbFill(&stdoutBuffer, fds[0].fd);
+	lbFill(&stderrBuffer, fds[1].fd);
+	lbFlush(&stdoutBuffer, LOG_INFO);
+	lbFlush(&stderrBuffer, LOG_NOTICE);
 }
