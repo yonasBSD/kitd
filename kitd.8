@@ -44,6 +44,7 @@ as well as
 Set the name of the process
 and the logging prefix.
 The default is
+the last path component of
 .Ar command .
 .It Fl t Ar restart
 The initial interval in milliseconds
@@ -62,9 +63,9 @@ responds to the following signals:
 The child process is sent
 .Dv SIGTERM
 and restarted.
-.It Dv SIGTERM
-The child process is sent
-.Dv SIGTERM .
+.It Dv SIGTERM , Dv SIGINT
+The signal is forwarded to
+the child process.
 .Nm
 exits.
 .It Dv SIGINFO
