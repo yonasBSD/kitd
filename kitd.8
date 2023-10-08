@@ -72,5 +72,19 @@ The signal is forwarded to
 the child process.
 .El
 .
+.Sh EXAMPLES
+To set up supervisors for
+.Xr pounce 1 :
+.Bd -literal
+# ln -s kitd /etc/rc.d/pounce_tilde
+# ln -s kitd /etc/rc.d/pounce_libera
+# rcctl enable pounce_tilde pounce_libera
+# rcctl set pounce_tilde user _pounce
+# rcctl set pounce_tilde flags pounce -h irc.tilde.chat defaults.conf
+# rcctl set pounce_libera user _pounce
+# rcctl set pounce_libera flags pounce -h irc.libera.chat defaults.conf
+# rcctl start pounce_tilde pounce_libera
+.Ed
+.
 .Sh AUTHORS
 .An June McEnroe Aq Mt june@causal.agency
