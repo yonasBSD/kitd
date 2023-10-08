@@ -174,23 +174,6 @@ int main(int argc, char *argv[]) {
 	struct Line stderrBuffer = {0};
 
 	for (;;) {
-		if (signals[SIGHUP]) {
-			interval = restart;
-			if (child) killpg(child, SIGTERM);
-			signals[SIGHUP] = 0;
-		}
-
-		if (signals[SIGINT] || signals[SIGTERM]) {
-			stop = true;
-			int sig = (signals[SIGINT] ? SIGINT : SIGTERM);
-			if (child) {
-				killpg(child, sig);
-			} else {
-				break;
-			}
-			signals[sig] = 0;
-		}
-
 		if (signals[SIGINFO]) {
 			clock_gettime(CLOCK_MONOTONIC, &now);
 			if (child) {
@@ -203,9 +186,27 @@ int main(int argc, char *argv[]) {
 			signals[SIGINFO] = 0;
 		}
 
-		if (signals[SIGUSR1] || signals[SIGUSR2]) {
-			int sig = (signals[SIGUSR1] ? SIGUSR1 : SIGUSR2);
-			if (child) killpg(child, sig);
+		if (signals[SIGHUP]) {
+			if (child) killpg(child, SIGHUP);
+			signals[SIGHUP] = 0;
+		}
+		if (signals[SIGUSR1]) {
+			if (child) killpg(child, SIGUSR1);
+			signals[SIGUSR1] = 0;
+		}
+		if (signals[SIGUSR2]) {
+			if (child) killpg(child, SIGUSR2);
+			signals[SIGUSR2] = 0;
+		}
+
+		if (signals[SIGINT] || signals[SIGTERM]) {
+			stop = true;
+			int sig = (signals[SIGINT] ? SIGINT : SIGTERM);
+			if (child) {
+				killpg(child, sig);
+			} else {
+				break;
+			}
 			signals[sig] = 0;
 		}
 

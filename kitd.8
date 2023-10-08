@@ -1,4 +1,4 @@
-.Dd October  7, 2023
+.Dd October  8, 2023
 .Dt KITD 8
 .Os
 .
@@ -59,10 +59,6 @@ The default interval is 1 second.
 .Nm
 responds to the following signals:
 .Bl -tag -width Ds
-.It Dv SIGHUP
-The child process is sent
-.Dv SIGTERM
-and restarted.
 .It Dv SIGTERM , Dv SIGINT
 The signal is forwarded to
 the child process.
@@ -71,7 +67,7 @@ exits.
 .It Dv SIGINFO
 The status of the child process
 is logged.
-.It Dv SIGUSR1 , Dv SIGUSR2
+.It Dv SIGHUP , Dv SIGUSR1 , Dv SIGUSR2
 The signal is forwarded to
 the child process.
 .El
