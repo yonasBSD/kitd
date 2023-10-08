@@ -59,7 +59,7 @@ The default interval is 1 second.
 .Nm
 responds to the following signals:
 .Bl -tag -width Ds
-.It Dv SIGTERM , Dv SIGINT
+.It Dv SIGTERM | Dv SIGINT
 The signal is forwarded to
 the child process.
 .Nm
@@ -67,7 +67,7 @@ exits.
 .It Dv SIGINFO
 The status of the child process
 is logged.
-.It Dv SIGHUP , Dv SIGUSR1 , Dv SIGUSR2
+.It Dv SIGHUP | Dv SIGUSR1 | Dv SIGUSR2
 The signal is forwarded to
 the child process.
 .El
