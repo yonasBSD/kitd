@@ -222,7 +222,6 @@ int main(int argc, char *argv[]) {
 				continue;
 			}
 			child = 0;
-			setproctitle("%s", name);
 
 			if (WIFEXITED(status)) {
 				int exit = WEXITSTATUS(status);
@@ -277,7 +276,6 @@ int main(int argc, char *argv[]) {
 			}
 			if (child) {
 				clock_gettime(CLOCK_MONOTONIC, &uptime);
-				setproctitle("%s [%d]", name, child);
 			} else {
 				setpgid(0, 0);
 				dup2(stdoutRW[1], STDOUT_FILENO);
