@@ -132,7 +132,7 @@ int main(int argc, char *argv[]) {
 	struct LineBuffer stdoutBuffer = {0};
 	struct LineBuffer stderrBuffer = {0};
 
-	openlog(name, LOG_NDELAY | LOG_PID | LOG_PERROR, LOG_DAEMON);
+	openlog(name, LOG_NDELAY | LOG_PERROR, LOG_DAEMON);
 	if (daemonize) {
 		error = daemon(0, 0);
 		if (error) {
