@@ -157,6 +157,10 @@ int main(int argc, char *argv[]) {
 	struct timeval interval = restart;
 	signals[SIGALRM] = 1;
 
+	sigset_t mask, unmask;
+	sigfillset(&mask);
+	sigemptyset(&unmask);
+	sigprocmask(SIG_SETMASK, &mask, NULL);
 	struct pollfd fds[2] = {
 		{ .fd = stdoutRW[0], .events = POLLIN },
 		{ .fd = stderrRW[0], .events = POLLIN },
@@ -259,7 +263,7 @@ int main(int argc, char *argv[]) {
 			signals[SIGINFO] = 0;
 		}
 
-		int nfds = poll(fds, 2, -1);
+		int nfds = ppoll(fds, 2, NULL, &unmask);
 		if (nfds < 0 && errno != EINTR) {
 			syslog(LOG_ERR, "poll: %m");
 			continue;
