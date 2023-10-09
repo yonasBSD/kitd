@@ -185,6 +185,7 @@ int main(int argc, char *argv[]) {
 				setpgid(0, 0);
 				dup2(stdoutRW[1], STDOUT_FILENO);
 				dup2(stderrRW[1], STDERR_FILENO);
+				sigprocmask(SIG_SETMASK, &unmask, NULL);
 				execvp(argv[0], (char *const *)argv);
 				err(127, "%s", argv[0]);
 			}
