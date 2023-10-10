@@ -1,4 +1,4 @@
-.Dd October  8, 2023
+.Dd October 10, 2023
 .Dt KITD 8
 .Os
 .
@@ -30,11 +30,22 @@ using exponential backoff.
 The options are as follows:
 .Bl -tag -width Ds
 .It Fl c Ar cooloff
-The interval in milliseconds
-for which the child process must live
+The interval for which
+the child process must live
 before the restart interval
 is reset to its initial value.
-The default interval is 15 minutes.
+.Pp
+The interval may have a suffix of
+.Sy s , m , h
+or
+.Sy d
+for seconds, minutes, hours or days,
+respectively.
+Otherwise,
+the interval is in milliseconds.
+.Pp
+The default cooloff interval is
+.Sy 15m .
 .It Fl d
 Do not daemonize.
 Log to standard error
@@ -47,12 +58,15 @@ The default is
 the last path component of
 .Ar command .
 .It Fl t Ar restart
-The initial interval in milliseconds
-between automatic restarts.
+The initial interval between automatic restarts.
 This interval is doubled
 each time the child process
 is restarted.
-The default interval is 1 second.
+.Pp
+The interval is interpreted as with
+.Fl c .
+The default restart interval is
+.Sy 1s .
 .El
 .
 .Pp

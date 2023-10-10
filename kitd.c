@@ -62,13 +62,14 @@ static void lbFlush(struct LineBuffer *lb, int priority) {
 	memmove(lb->buf, ptr, lb->len);
 }
 
+enum { M = 60, H = 60*M, D = 24*H };
+
 static const char *humanize(const struct timeval *interval) {
 	static char buf[256];
 	if (!interval->tv_sec) {
 		snprintf(buf, sizeof(buf), "%dms", (int)(interval->tv_usec / 1000));
 		return buf;
 	}
-	enum { M = 60, H = 60*M, D = 24*H };
 	int s = interval->tv_sec;
 	int d = s / D; s %= D;
 	int h = s / H; s %= H;
@@ -80,15 +81,23 @@ static const char *humanize(const struct timeval *interval) {
 	return buf;
 }
 
+static void parse(struct timeval *interval, const char *str) {
+	char *endptr;
+	unsigned long n = strtoul(str, &endptr, 10);
+	timerclear(interval);
+	switch (*endptr) {
+		break; case 's': interval->tv_sec = n;
+		break; case 'm': interval->tv_sec = n*M;
+		break; case 'h': interval->tv_sec = n*H;
+		break; case 'd': interval->tv_sec = n*D;
+		break; case '\0': interval->tv_usec = n * 1000;
+		break; default: errx(1, "invalid suffix '%c'", *endptr);
+	}
+}
+
 static volatile sig_atomic_t signals[NSIG];
 static void signalHandler(int signal) {
 	signals[signal] = 1;
-}
-
-static void parseInterval(struct timeval *interval, const char *millis) {
-	unsigned long ms = strtoul(millis, NULL, 10);
-	interval->tv_sec = ms / 1000;
-	interval->tv_usec = 1000 * (ms % 1000);
 }
 
 int main(int argc, char *argv[]) {
@@ -97,13 +106,13 @@ int main(int argc, char *argv[]) {
 	bool daemonize = true;
 	const char *name = NULL;
 	struct timeval restart = { .tv_sec = 1 };
-	struct timeval cooloff = { .tv_sec = 15 * 60 };
+	struct timeval cooloff = { .tv_sec = 15*M };
 	for (int opt; 0 < (opt = getopt(argc, argv, "c:dn:t:"));) {
 		switch (opt) {
-			break; case 'c': parseInterval(&cooloff, optarg);
+			break; case 'c': parse(&cooloff, optarg);
 			break; case 'd': daemonize = false;
 			break; case 'n': name = optarg;
-			break; case 't': parseInterval(&restart, optarg);
+			break; case 't': parse(&restart, optarg);
 			break; default: return 1;
 		}
 	}
