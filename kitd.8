@@ -10,6 +10,7 @@
 .Nm
 .Op Fl d
 .Op Fl c Ar cooloff
+.Op Fl m Ar maximum
 .Op Fl n Ar name
 .Op Fl t Ar restart
 .Ar command ...
@@ -51,6 +52,13 @@ Do not daemonize.
 Log to standard error
 as well as
 .Xr syslog 3 .
+.It Fl m Ar maximum
+The maximum interval between restarts.
+.Pp
+The interval is interpreted as with
+.Fl c .
+The default maximum interval is
+.Sy 1h .
 .It Fl n Ar name
 Set the name of the process
 and the logging prefix.
@@ -58,7 +66,7 @@ The default is
 the last path component of
 .Ar command .
 .It Fl t Ar restart
-The initial interval between automatic restarts.
+The initial interval between restarts.
 This interval is doubled
 each time the child process
 is restarted.

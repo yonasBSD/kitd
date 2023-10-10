@@ -107,10 +107,12 @@ int main(int argc, char *argv[]) {
 	const char *name = NULL;
 	struct timeval restart = { .tv_sec = 1 };
 	struct timeval cooloff = { .tv_sec = 15*M };
-	for (int opt; 0 < (opt = getopt(argc, argv, "c:dn:t:"));) {
+	struct timeval maximum = { .tv_sec = 1*H };
+	for (int opt; 0 < (opt = getopt(argc, argv, "c:dm:n:t:"));) {
 		switch (opt) {
 			break; case 'c': parse(&cooloff, optarg);
 			break; case 'd': daemonize = false;
+			break; case 'm': parse(&maximum, optarg);
 			break; case 'n': name = optarg;
 			break; case 't': parse(&restart, optarg);
 			break; default: return 1;
@@ -257,7 +259,11 @@ int main(int argc, char *argv[]) {
 			syslog(LOG_INFO, "restarting in %s", humanize(&interval));
 			struct itimerval timer = { .it_value = interval };
 			setitimer(ITIMER_REAL, &timer, NULL);
+
 			timeradd(&interval, &interval, &interval);
+			if (timercmp(&interval, &maximum, >)) {
+				interval = maximum;
+			}
 		}
 
 		if (signals[SIGINFO]) {
