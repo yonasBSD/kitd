@@ -126,8 +126,10 @@ int main(int argc, char *argv[]) {
 		name = (name ? &name[1] : argv[0]);
 	}
 
+#ifdef __OpenBSD__
 	error = pledge("stdio rpath proc exec", NULL);
 	if (error) err(1, "pledge");
+#endif
 
 	int stdoutRW[2];
 	error = pipe2(stdoutRW, O_CLOEXEC);
